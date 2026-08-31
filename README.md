@@ -93,6 +93,42 @@ says about the same price.
 It defaults to **10/1 and up**, since that is the range worth watching; `ALL
 ODDS` shows the short prices too.
 
+## Watching it from anywhere
+
+The PC is not always on, so the same collection also runs on a GitHub Actions
+schedule and publishes the dashboard as a static page. Open it on a phone, on
+another machine, anywhere:
+
+    https://<your-github-username>.github.io/<repo>/
+
+`cloud_build.py` does in one shot what `vhr_service.py` does continuously —
+scrape the card once the new one is up, fetch every outstanding result, write
+`index.html` + `data.json`. The store rides along on the `gh-pages` branch under
+`store/races.json`, so each run carries on from the last.
+
+Two things about that branch: it is force-pushed as a single orphan commit each
+run, so 96 updates a day never turn into 96 commits; and the repo is public, so
+the collected data is public too.
+
+The page is a snapshot, not a live server — it refreshes when the workflow next
+runs (every 15 minutes, sometimes later when GitHub is busy). The local
+dashboard stays live and second-by-second.
+
+### Setting it up
+
+1. Create an empty repo on github.com (public).
+2. Push this folder to it:
+
+       git remote add origin https://github.com/<you>/<repo>.git
+       git push -u origin main
+
+3. Repo → **Settings → Pages** → Source: **Deploy from a branch**, branch
+   `gh-pages`, folder `/ (root)`. The branch appears after the first run.
+4. Repo → **Actions** → **VHR** → **Run workflow**, to build it immediately
+   instead of waiting for the schedule.
+
+The workflow needs no secrets — `GITHUB_TOKEN` is provided automatically.
+
 ## Data
 
 | File | |
