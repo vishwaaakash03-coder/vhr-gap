@@ -95,39 +95,35 @@ ODDS` shows the short prices too.
 
 ## Watching it from anywhere
 
-The PC is not always on, so the same collection also runs on a GitHub Actions
-schedule and publishes the dashboard as a static page. Open it on a phone, on
-another machine, anywhere:
+    https://vishwaaakash03-coder.github.io/vhr-gap/
 
-    https://<your-github-username>.github.io/<repo>/
+Open it on a phone, on another machine, anywhere. Add it to the home screen and
+it behaves like an app.
 
-`cloud_build.py` does in one shot what `vhr_service.py` does continuously —
-scrape the card once the new one is up, fetch every outstanding result, write
-`index.html` + `data.json`. The store rides along on the `gh-pages` branch under
-`store/races.json`, so each run carries on from the last.
+### Why the collecting still runs here
 
-Two things about that branch: it is force-pushed as a single orphan commit each
-run, so 96 updates a day never turn into 96 commits; and the repo is public, so
-the collected data is public too.
+STBET refuses every request from outside Sri Lanka. A GitHub Actions runner in
+Virginia gets **403 on the API and on the site's own home page**:
 
-The page is a snapshot, not a live server — it refreshes when the workflow next
-runs (every 15 minutes, sometimes later when GitHub is busy). The local
-dashboard stays live and second-by-second.
+    runner ip : 57.154.232.209  (Microsoft, US)
+    homepage  : status=403
+    api       : status=403      server: awselb/2.0
 
-### Setting it up
+So the collecting cannot be moved to a cloud runner, whatever the provider —
+the same applies to Cloudflare Workers, Oracle, and anything else outside LK.
+Only the finished page travels.
 
-1. Create an empty repo on github.com (public).
-2. Push this folder to it:
+`vhr_publish.py` builds `index.html` + `data.json` and force-pushes them as a
+single orphan commit to the `gh-pages` branch, every 10 minutes, from inside the
+service. A year of updates never becomes a year of commits.
 
-       git remote add origin https://github.com/<you>/<repo>.git
-       git push -u origin main
+### What happens when this PC is off
 
-3. Repo → **Settings → Pages** → Source: **Deploy from a branch**, branch
-   `gh-pages`, folder `/ (root)`. The branch appears after the first run.
-4. Repo → **Actions** → **VHR** → **Run workflow**, to build it immediately
-   instead of waiting for the schedule.
+The site stays up and stays usable — it just stops moving, showing the last
+push. Since the card does not change during the day, that is still a working
+page. It catches up on its own when the PC comes back.
 
-The workflow needs no secrets — `GITHUB_TOKEN` is provided automatically.
+The repo is public, so the collected data is public too.
 
 ## Data
 
