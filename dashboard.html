@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VHR // GAP TELEMETRY</title>
+<style>
+:root{
+  --bg:#0A0A0A;
+  --panel:#141414;
+  --panel2:#1B1B1B;
+  --line:#2C2C2C;
+  --fg:#EAEAEA;
+  --dim:#8A8A8A;
+  --dimmer:#555;
+  --red:#E61919;
+  --green:#4AF626;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --mono:ui-monospace,"Cascadia Mono","Consolas","DejaVu Sans Mono",monospace;
+  --sans:"Segoe UI",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;border-radius:0}
+html{background:var(--bg)}
+body{
+  background:var(--bg);color:var(--fg);font-family:var(--mono);
+  font-size:15px;line-height:1.45;letter-spacing:.03em;
+  -webkit-font-smoothing:antialiased;padding-bottom:50px;
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.2) 2px,rgba(0,0,0,.2) 4px);
+  mix-blend-mode:multiply;
+}
+.wrap{max-width:1500px;margin:0 auto;padding:0 22px}
+
+/* ---------- header ---------- */
+header{border-bottom:2px solid var(--fg)}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:24px 0 14px;flex-wrap:wrap}
+h1{font-family:var(--sans);font-weight:900;font-size:clamp(2.2rem,5vw,3.8rem);
+   line-height:.85;letter-spacing:-.045em;text-transform:uppercase}
+h1 .slash{color:var(--red)}
+.meta{text-align:right;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.dot{display:inline-block;width:8px;height:8px;background:var(--green);margin-right:7px;vertical-align:1px}
+.dot.stale{background:var(--red)}
+
+/* ---------- section chrome ---------- */
+.sect{margin-top:28px}
+.sect-hd{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+  padding-bottom:9px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.sect-hd .t{color:var(--fg)}
+
+/* ---------- next race ---------- */
+.next-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1px;background:var(--line)}
+.nx{background:var(--panel);padding:16px 18px 18px}
+.nx-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.nx-track{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.nx-in{font-size:12px;letter-spacing:.06em;color:var(--dimmer);text-transform:uppercase}
+.nx-time{font-family:var(--sans);font-weight:900;font-size:3rem;line-height:.9;
+  letter-spacing:-.04em;margin:2px 0 14px}
+.nx-row{display:grid;grid-template-columns:74px 34px 1fr auto;gap:10px;align-items:center;
+  padding:7px 0;font-size:15px}
+.nx-row + .nx-row{border-top:1px solid var(--line)}
+.nx-odds{font-weight:700;font-size:17px}
+.nx-x{color:var(--dimmer);font-size:12px}
+.nx-gap{color:var(--dim);font-size:13px}
+.nx-gap b{color:var(--fg);font-weight:400}
+.nx-empty{color:var(--dimmer);font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:10px 0}
+
+/* ---------- badges ---------- */
+.sig{display:inline-block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border:1px solid currentColor;white-space:nowrap;font-weight:700}
+.sig-vh{background:var(--red);color:#0A0A0A;border-color:var(--red)}
+.sig-h {color:var(--red)}
+.sig-w {color:var(--fg);font-weight:400}
+.sig-c {color:var(--dimmer);font-weight:400}
+.sig-n {color:var(--dimmer);font-weight:400}
+
+/* ---------- controls ---------- */
+.bar{display:flex;gap:1px;background:var(--line);flex-wrap:wrap}
+button{font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--panel);color:var(--dim);border:0;padding:11px 20px;cursor:pointer;
+  transition:color 140ms var(--ease-out),background 140ms var(--ease-out),transform 140ms var(--ease-out)}
+button:hover{color:var(--fg)}
+button:active{transform:scale(.97)}
+button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.controls{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+
+/* ---------- table: five columns, big type ---------- */
+.tbl-wrap{overflow-x:auto;border-top:1px solid var(--line)}
+/* narrow enough that all five columns land in one glance */
+table{width:100%;max-width:880px;border-collapse:collapse;min-width:620px}
+th{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+  font-weight:400;text-align:right;padding:10px 14px;border-bottom:1px solid var(--line);
+  white-space:nowrap;position:sticky;top:0;background:var(--bg);z-index:2}
+th:first-child,td:first-child{text-align:left;padding-left:14px}
+th:last-child,td:last-child{text-align:left}
+td{padding:12px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;font-size:17px}
+tbody tr{cursor:pointer;transition:background 120ms var(--ease-out)}
+tbody tr:hover{background:var(--panel)}
+td.odds{font-weight:700;font-size:21px;letter-spacing:.02em}
+td.dim{color:var(--dim);font-size:15px}
+td.now{font-family:var(--sans);font-weight:900;font-size:24px;letter-spacing:-.02em;position:relative}
+tr.hot td.odds,tr.hot td.now{color:var(--red)}
+tr.hot{box-shadow:inset 3px 0 0 var(--red)}
+.bar-fill{position:absolute;left:14px;right:14px;bottom:6px;height:3px;background:var(--line)}
+.bar-fill i{display:block;height:100%;background:var(--dimmer)}
+tr.hot .bar-fill i{background:var(--red)}
+tbody tr.in{opacity:0;transform:translateY(4px);animation:rise 260ms var(--ease-out) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.flash{animation:flash 900ms var(--ease-out)}
+@keyframes flash{0%{color:var(--red)}100%{color:inherit}}
+.hint{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer);padding:12px 14px}
+
+/* ---------- modal ---------- */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:50;
+  display:flex;align-items:center;justify-content:center;padding:24px;
+  opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
+.backdrop.on{opacity:1;pointer-events:auto}
+.modal{background:var(--panel);border:1px solid var(--line);width:min(880px,100%);
+  max-height:88vh;overflow-y:auto;padding:26px 28px 28px;
+  transform:scale(.96);opacity:0;transform-origin:center;
+  transition:transform 200ms var(--ease-out),opacity 200ms var(--ease-out)}
+.backdrop.on .modal{transform:scale(1);opacity:1}
+.m-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;
+  padding-bottom:18px;border-bottom:2px solid var(--fg);margin-bottom:20px}
+.m-odds{font-family:var(--sans);font-weight:900;font-size:4rem;line-height:.85;letter-spacing:-.05em}
+.m-sub{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-top:8px}
+.m-close{background:transparent;color:var(--dim);border:1px solid var(--line);padding:8px 13px;font-size:14px}
+.m-close:hover{color:var(--fg);border-color:var(--fg)}
+.m-sig{margin-top:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line)}
+.st{background:var(--panel2);padding:12px 14px}
+.st .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.st .v{font-family:var(--sans);font-weight:900;font-size:1.75rem;letter-spacing:-.03em;line-height:1.25}
+.st .v.red{color:var(--red)}
+.m-lbl{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
+  margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.g8-wrap{overflow-x:auto}
+.g8{display:grid;gap:1px;background:var(--line);min-width:max-content}
+.g8 > div{background:var(--panel2);padding:12px 10px;text-align:center;min-width:80px}
+.g8 .n{font-family:var(--sans);font-weight:900;font-size:1.9rem;line-height:1;letter-spacing:-.03em}
+.g8 .d{font-size:10px;letter-spacing:.06em;color:var(--dimmer);margin-top:6px}
+.g8 .now{background:var(--red)}
+.g8 .now .n,.g8 .now .d{color:#0A0A0A}
+.chart{display:flex;align-items:flex-end;gap:2px;height:110px;border-bottom:1px solid var(--line)}
+.cb{flex:1 1 0;min-width:2px;background:var(--dimmer);transition:background 140ms var(--ease-out)}
+.cb.cur{background:var(--red)}
+.cb:hover{background:var(--fg)}
+.chart-ax{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--dimmer);margin-top:7px}
+
+footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
+  font-size:12px;letter-spacing:.06em;color:var(--dimmer);
+  display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.warn{color:var(--dim);border-left:2px solid var(--red);padding-left:12px;max-width:640px;line-height:1.55}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:1ms !important;transition-duration:1ms !important}
+  tbody tr.in{opacity:1;transform:none}
+  .modal{transform:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="hd">
+      <h1>VHR<span class="slash">//</span>GAP</h1>
+      <div class="meta">
+        <div><span class="dot" id="dot"></span><span id="sync">booting</span></div>
+        <div id="cov">&nbsp;</div>
+      </div>
+    </div>
+  </header>
+
+  <section class="sect">
+    <div class="sect-hd"><span class="t">[ NEXT RACE ]</span><span>longest droughts on offer</span></div>
+    <div class="next-grid" id="next"></div>
+  </section>
+
+  <section class="sect">
+    <div class="controls">
+      <div class="bar" id="tabs"></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <div class="bar" id="range">
+          <button data-min="10" aria-pressed="true">10/1 &amp; UP</button>
+          <button data-min="0" aria-pressed="false">ALL ODDS</button>
+        </div>
+        <div class="bar" id="modes">
+          <button data-mode="chances" aria-pressed="true">BY CHANCES</button>
+          <button data-mode="races" aria-pressed="false">BY RACES</button>
+        </div>
+      </div>
+    </div>
+    <div class="sect-hd"><span class="t" id="tbl-title">&nbsp;</span><span id="tbl-note">&nbsp;</span></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Odds</th><th>Now</th><th>Avg</th><th>Pctile</th><th>Signal</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="hint" id="hint">&gt;&gt;&gt; click any row for the full record</div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="warn">
+      These are RNG virtual races and each one is independent. A long drought does not make
+      the next race more likely to end it &mdash; the signal describes this price&rsquo;s history,
+      not its future.
+    </div>
+    <div>REV 2.0 &middot; UNIT / VHR-GAP</div>
+  </footer>
+</div>
+
+<div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
+
+<script>
+const SIG_CLASS = {"VERY HOT":"sig-vh","HOT":"sig-h","WARM":"sig-w","COLD":"sig-c","NEW":"sig-n"};
+let DATA=null, TRACK=null, MODE="chances", MINV=10, FIRST=true, PREV={};
+
+const pct  = v => v==null ? "—" : Math.round(v*100)+"%";
+const num  = v => v==null ? "—" : v;
+const esc  = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const badge= s => `<span class="sig ${SIG_CLASS[s]||"sig-c"}">${s}</span>`;
+const isHot= s => s==="HOT"||s==="VERY HOT";
+
+/* ---------- next race ---------- */
+function renderNext(){
+  document.getElementById("next").innerHTML = DATA.order.map(track=>{
+    const t=DATA.tracks[track], nx=t.next;
+    if(!nx) return `<div class="nx"><div class="nx-track">${esc(track)}</div>
+      <div class="nx-empty">// no upcoming race carded</div></div>`;
+    const top=t.next_signals.filter(s=>s.value>=MINV&&s.signal!=="COLD"&&s.signal!=="NEW").slice(0,5);
+    const list = top.length ? top.map(s=>`
+      <div class="nx-row">
+        <span class="nx-odds">${esc(s.odds)}</span>
+        <span class="nx-x">&times;${s.runners}</span>
+        <span class="nx-gap">gap <b>${s.current}</b> / avg ${num(s.avg)}</span>
+        ${badge(s.signal)}
+      </div>`).join("")
+      : `<div class="nx-empty">// nothing above baseline in this race</div>`;
+    return `<div class="nx">
+      <div class="nx-top"><span class="nx-track">${esc(track)}</span>
+        <span class="nx-in">in ${nx.in_mins} min &middot; ${nx.runners} runners</span></div>
+      <div class="nx-time">${esc(nx.time)}</div>${list}</div>`;
+  }).join("");
+}
+
+function renderTabs(){
+  document.getElementById("tabs").innerHTML = DATA.order.map(t=>
+    `<button data-track="${esc(t)}" aria-pressed="${t===TRACK}">${esc(t)}</button>`).join("");
+}
+
+/* ---------- table ---------- */
+function visibleRows(){
+  const t=DATA.tracks[TRACK];
+  return t ? t.rows.filter(r=>r[MODE].total>0 && r.value>=MINV) : [];
+}
+
+function renderTable(){
+  const t=DATA.tracks[TRACK]; if(!t) return;
+  const rows=visibleRows();
+  const maxCur=Math.max(1,...rows.map(r=>r[MODE].current));
+
+  document.getElementById("tbl-title").textContent=`[ ${TRACK.toUpperCase()} ]`;
+  const young = rows.filter(r=>r[MODE].signal!=="NEW").length < rows.length/2;
+  document.getElementById("hint").textContent = young
+    ? ">>> still building history - a price needs 3 completed gaps before it gets a signal"
+    : ">>> click any row for the full record";
+  document.getElementById("tbl-note").textContent = MODE==="chances"
+    ? `gap counts only the races that offered the price · ${t.n_carded} carded races`
+    : `gap counts every race that ran · ${t.n_races} results`;
+
+  document.getElementById("rows").innerHTML = rows.map((r,i)=>{
+    const m=r[MODE], hot=isHot(m.signal);
+    const key=r.odds+"|"+MODE;
+    const changed=PREV[key]!=null&&PREV[key]!==m.current; PREV[key]=m.current;
+    return `<tr data-odds="${esc(r.odds)}" class="${hot?"hot":""} ${FIRST&&i<12?"in":""}"
+             ${FIRST&&i<12?`style="animation-delay:${i*28}ms"`:""}>
+      <td class="odds">${esc(r.odds)}</td>
+      <td class="now"><span class="${changed?"flash":""}">${m.current}</span>
+        <span class="bar-fill"><i style="width:${Math.round(100*m.current/maxCur)}%"></i></span></td>
+      <td class="dim">${num(m.avg)}</td>
+      <td class="dim">${pct(m.pct)}</td>
+      <td>${badge(m.signal)}</td>
+    </tr>`;
+  }).join("");
+  FIRST=false;
+}
+
+/* ---------- modal ---------- */
+function openModal(odds){
+  const t=DATA.tracks[TRACK];
+  const row=t.rows.find(r=>r.odds===odds); if(!row) return;
+  const m=row[MODE], other=row[MODE==="chances"?"races":"chances"];
+  const h=(t.history[odds]||{})[MODE]||{gaps:[],current:m.current};
+  document.getElementById("backdrop").classList.add("on");
+  const peak=Math.max(1,...h.gaps.map(g=>g.gap),h.current);
+
+  const tail=h.gaps.slice(-8), n8=tail.length+1;
+  const last8=tail.map(g=>
+    `<div><div class="n">${g.gap}</div><div class="d">${esc(g.date.slice(5))}</div></div>`).join("")
+    + `<div class="now"><div class="n">${h.current}</div><div class="d">running</div></div>`;
+
+  const bars=h.gaps.map(g=>
+    `<div class="cb" style="height:${Math.max(2,100*g.gap/peak)}%" title="${g.gap} · ${g.date} ${g.time}"></div>`).join("")
+    + `<div class="cb cur" style="height:${Math.max(2,100*h.current/peak)}%" title="running now: ${h.current}"></div>`;
+
+  document.getElementById("modal").innerHTML=`
+    <div class="m-hd">
+      <div>
+        <div class="m-odds">${esc(odds)}</div>
+        <div class="m-sub">${esc(TRACK)} &middot; by ${MODE}</div>
+        <div class="m-sig">${badge(m.signal)}</div>
+      </div>
+      <button class="m-close" id="mclose">CLOSE &times;</button>
+    </div>
+
+    <div class="grid">
+      <div class="st"><div class="k">Now</div><div class="v ${isHot(m.signal)?"red":""}">${m.current}</div></div>
+      <div class="st"><div class="k">Average</div><div class="v">${num(m.avg)}</div></div>
+      <div class="st"><div class="k">Median</div><div class="v">${num(m.median)}</div></div>
+      <div class="st"><div class="k">Shortest</div><div class="v">${num(m.min)}</div></div>
+      <div class="st"><div class="k">Longest</div><div class="v">${num(m.max)}</div></div>
+      <div class="st"><div class="k">Pctile</div><div class="v">${pct(m.pct)}</div></div>
+    </div>
+
+    <div class="m-lbl">[ LAST 8 GAPS ] &nbsp;&rarr;&nbsp; oldest to newest, red = drought running now</div>
+    <div class="g8-wrap"><div class="g8" style="grid-template-columns:repeat(${n8},1fr)">${last8}</div></div>
+
+    <div class="m-lbl">[ FULL HISTORY ] &nbsp;&rarr;&nbsp; ${h.gaps.length} completed gaps</div>
+    <div class="chart">${bars}</div>
+    <div class="chart-ax"><span>&larr; older</span><span>now: ${h.current}</span></div>
+
+    <div class="m-lbl">[ RECORD ]</div>
+    <div class="grid">
+      <div class="st"><div class="k">Seen</div><div class="v">${m.total}</div></div>
+      <div class="st"><div class="k">Wins</div><div class="v">${m.wins}</div></div>
+      <div class="st"><div class="k">Win rate</div><div class="v">${row.win_rate==null?"—":row.win_rate+"%"}</div></div>
+      <div class="st"><div class="k">Last win</div><div class="v" style="font-size:1.15rem">${row.last_win?esc(row.last_win.date.slice(5)+" "+row.last_win.time):"—"}</div></div>
+      <div class="st"><div class="k">By ${MODE==="chances"?"races":"chances"}</div><div class="v">${other.current}</div></div>
+      <div class="st"><div class="k">Its average</div><div class="v">${num(other.avg)}</div></div>
+    </div>`;
+  document.getElementById("mclose").onclick=closeModal;
+}
+function closeModal(){ document.getElementById("backdrop").classList.remove("on"); }
+
+/* ---------- wiring ---------- */
+document.getElementById("tabs").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  TRACK=b.dataset.track; renderTabs(); renderTable();
+});
+document.getElementById("modes").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  MODE=b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b));
+  renderTable();
+});
+document.getElementById("range").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  MINV=Number(b.dataset.min);
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b));
+  renderNext(); renderTable();
+});
+document.getElementById("rows").addEventListener("click",e=>{
+  const tr=e.target.closest("tr"); if(tr) openModal(tr.dataset.odds);
+});
+document.getElementById("next").addEventListener("click",e=>{
+  const row=e.target.closest(".nx-row"), card=e.target.closest(".nx");
+  if(!row||!card) return;
+  const track=card.querySelector(".nx-track").textContent;
+  if(track!==TRACK){ TRACK=track; renderTabs(); renderTable(); }
+  openModal(row.querySelector(".nx-odds").textContent);
+});
+document.getElementById("backdrop").addEventListener("click",e=>{
+  if(e.target.id==="backdrop") closeModal();
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+
+async function refresh(){
+  try{
+    DATA=await (await fetch("data.json",{cache:"no-store"})).json();
+    if(!TRACK||!DATA.tracks[TRACK]) TRACK=DATA.order[0];
+    const c=DATA.coverage;
+    document.getElementById("sync").textContent="synced "+DATA.generated.slice(11);
+    document.getElementById("cov").textContent = c.since
+      ? `${c.with_winner.toLocaleString()} results · ${c.days} day${c.days===1?"":"s"} · since ${c.since}`
+      : "no data collected yet";
+    document.getElementById("dot").className="dot";
+    renderTabs(); renderNext(); renderTable();
+  }catch(err){
+    document.getElementById("dot").className="dot stale";
+    document.getElementById("sync").textContent="server unreachable";
+  }
+}
+refresh();
+setInterval(refresh,60000);
+</script>
+</body>
+</html>

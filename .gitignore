@@ -1,0 +1,15 @@
+# Local collection - the cloud build keeps its own copy on the gh-pages branch
+data/
+state/
+days/
+cloud-data/
+site/
+
+# Runtime
+*.log
+.vhr*.lock
+__pycache__/
+*.pyc
+
+# Excel lock files
+~$*
