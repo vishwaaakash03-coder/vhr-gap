@@ -1,13 +1,14 @@
 """
-VHR service - runs the three long-lived parts in one process.
+VHR service - runs the long-lived parts in one process.
 
     card collector    waits for the 04:30 card swap, writes days/*.xlsx
     results collector records which odds won each race, every 2 minutes
     gap dashboard     serves http://localhost:8770
+    publisher         pushes the page to GitHub Pages every 10 minutes
 
 They are separate scripts and still run standalone, but Windows Task Scheduler
 executes a task's actions one after another and waits for each to finish - so
-three actions would only ever start the first. One process, three threads.
+four actions would only ever start the first. One process, four threads.
 
 Each part is network-bound and spends nearly all its time asleep, so threads are
 plenty. A thread that crashes is logged and restarted rather than silently lost.
@@ -24,6 +25,7 @@ import vhr_core as core
 import vhr_collector
 import vhr_results
 import vhr_dashboard
+import vhr_publish
 
 RESTART_DELAY = 30
 
@@ -50,10 +52,13 @@ def supervise(name, fn, argv):
             time.sleep(RESTART_DELAY)
 
 
+# STBET refuses every request from outside Sri Lanka, so the collecting cannot
+# be moved to a cloud runner - only the finished page travels.
 PARTS = [
     ("card collector",    vhr_collector.main, []),
     ("results collector", vhr_results.main,   []),
     ("gap dashboard",     vhr_dashboard.main, ["--no-open"]),
+    ("publisher",         vhr_publish.main,   ["--loop"]),
 ]
 
 

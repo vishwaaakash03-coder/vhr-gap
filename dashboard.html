@@ -155,6 +155,40 @@ footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
   display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .warn{color:var(--dim);border-left:2px solid var(--red);padding-left:12px;max-width:640px;line-height:1.55}
 
+/* ---------- phone ---------- */
+@media (max-width:560px){
+  body{font-size:14px}
+  .wrap{padding:0 14px}
+  .hd{padding:18px 0 12px;gap:10px}
+  .meta{text-align:left;font-size:11px}
+  .sect{margin-top:20px}
+  .sect-hd{font-size:11px;gap:8px}
+  .next-grid{grid-template-columns:1fr}
+  .nx{padding:13px 14px 14px}
+  .nx-time{font-size:2.4rem;margin:0 0 10px}
+  .nx-top{flex-wrap:wrap;gap:4px}
+  /* four tight columns beat two wrapped lines on a narrow screen */
+  .nx-row{grid-template-columns:auto 26px 1fr auto;gap:8px;padding:8px 0}
+  .nx-odds{font-size:16px;min-width:52px}
+  .nx-gap{font-size:12px;white-space:nowrap;text-align:right}
+  .sig{font-size:10px;padding:2px 5px;letter-spacing:.06em}
+  .controls{gap:10px}
+  button{padding:10px 13px;font-size:11px;letter-spacing:.06em}
+  th{padding:8px 8px;font-size:10px}
+  td{padding:10px 8px;font-size:15px}
+  th:first-child,td:first-child{padding-left:8px}
+  td.odds{font-size:18px}
+  td.now{font-size:21px}
+  table{min-width:0}
+  .modal{padding:18px 16px 22px;max-height:92vh}
+  .m-odds{font-size:3rem}
+  .m-hd{gap:12px}
+  .st .v{font-size:1.4rem}
+  .g8 > div{min-width:66px;padding:10px 6px}
+  .g8 .n{font-size:1.5rem}
+  footer{font-size:11px}
+}
+
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:1ms !important;transition-duration:1ms !important}
   tbody tr.in{opacity:1;transform:none}
