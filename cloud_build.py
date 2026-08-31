@@ -49,11 +49,21 @@ def collect_card(store, day):
     ready = len(status) >= 2 and all(v["upcoming"] > CARD_READY_MIN
                                      for v in status.values())
     shape = ", ".join(f"{t} {v['upcoming']}/{v['total']}" for t, v in sorted(status.items()))
-    if not ready:
-        log(f"old card still being served ({shape}) - not scraping")
-        return 0
 
     start, end = core.card_window(day)
+
+    # The readiness gate stops a half-swapped card being taken as the new one.
+    # On the very first run there is nothing to protect: an empty store should
+    # take whatever the site is serving rather than sit blank until 04:30. Races
+    # outside this card's window are dropped below either way, so a lingering
+    # finished card cannot sneak in.
+    have_today = any(start <= report.race_dt(r) < end
+                     for r in store["races"].values() if r.get("odds"))
+    if not ready and have_today:
+        log(f"old card still being served ({shape}) - not scraping")
+        return 0
+    if not ready:
+        log(f"store is empty - taking the card as served ({shape})")
     todo = []
     for track, mid in core.get_meetings().items():
         if track not in status:
@@ -71,7 +81,8 @@ def collect_card(store, day):
         log(f"card already collected ({shape})")
         return 0
 
-    log(f"new card is up ({shape}) - fetching {len(todo)} races")
+    log(f"{'new card is up' if ready else 'bootstrapping'} ({shape}) "
+        f"- fetching {len(todo)} races")
     added = 0
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
         futures = {ex.submit(core.fetch_event_odds, ev["id"]): (track, ev)
