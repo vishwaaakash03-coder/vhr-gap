@@ -33,6 +33,11 @@ import vhr_data as data
 import vhr_report as report
 
 PUBLISH_EVERY = 600                     # 10 minutes
+
+# The service runs under pythonw.exe, which has no console of its own. Every
+# git call would otherwise flash up its own console window - six of them per
+# publish, every ten minutes, on top of whatever the user is doing.
+NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 BRANCH = "gh-pages"
 OUT_DIR = os.path.join(core.BASE_DIR, "publish")
 LOG_PATH = os.path.join(core.BASE_DIR, "vhr.log")
@@ -53,7 +58,7 @@ def remote_url():
     try:
         out = subprocess.run(["git", "remote", "get-url", "origin"],
                              cwd=core.BASE_DIR, capture_output=True, text=True,
-                             timeout=20)
+                             timeout=20, **NO_WINDOW)
         return out.stdout.strip() or None
     except Exception:
         return None
@@ -79,7 +84,7 @@ def build_site(out_dir):
 
 def git(args, cwd, check=True):
     r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True,
-                       text=True, timeout=180)
+                       text=True, timeout=180, **NO_WINDOW)
     if check and r.returncode:
         raise RuntimeError(f"git {' '.join(args[:2])}: {r.stderr.strip()[:200]}")
     return r
