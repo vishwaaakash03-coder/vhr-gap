@@ -30,7 +30,7 @@ def merge_betvirtual(store, day, log=print):
     """Fetch betvirtual and merge its card and results into the store."""
     import vhr_betvirtual as bv
 
-    n_card = n_res = 0
+    n_card = n_res = skipped = 0
     collected = bv.collect_day(log=lambda *a: None)
     for track, v in collected.items():
         for rec in v["races"].values():
@@ -43,10 +43,21 @@ def merge_betvirtual(store, day, log=print):
             if rec.get("winner_odds"):
                 fields["winner_odds"] = rec["winner_odds"]
                 fields["winner"] = rec.get("winner")
+            if not fields:
+                continue
+            # The results page covers a whole finished day, which may be one we
+            # never carded. A winner with no card is half a race: it would count
+            # in the by-races gaps while being invisible to by-chances, so a day
+            # we have no card for is left out entirely.
+            known = data.race_key(track, rec["date"], rec["time"]) in store["races"]
+            if not rec.get("odds") and not known:
+                skipped += 1
+                continue
+            if rec.get("winner_odds"):
                 n_res += 1
-            if fields:
-                data.upsert(store, track, rec["date"], rec["time"], **fields)
-    log(f"  betvirtual: {n_card} carded, {n_res} results")
+            data.upsert(store, track, rec["date"], rec["time"], **fields)
+    note = f", {skipped} results skipped (no card for that day)" if skipped else ""
+    log(f"  betvirtual: {n_card} carded, {n_res} results{note}")
     return n_card, n_res
 
 
