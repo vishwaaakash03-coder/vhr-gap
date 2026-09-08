@@ -64,7 +64,7 @@ STBET's own readiness rule still applies to its half: until the 04:30–05:00 sw
 the site serves the **finished** card — full-looking, but with nothing left to
 run — so readiness is counted in races that have **not started yet**, more than
 `CARD_READY_MIN` (20) per track. Counting total races instead is what made the
-old `race\daysuto_scheduler.py` scrape a dead day at 04:30:02.
+old `race/days/auto_scheduler.py` scrape a dead day at 04:30:02.
 
 ### Cloudflare
 
