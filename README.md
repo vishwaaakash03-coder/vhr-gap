@@ -114,6 +114,54 @@ says about the same price.
 It defaults to **10/1 and up**, since that is the range worth watching; `ALL
 ODDS` shows the short prices too.
 
+## Past results: the 49s backfill
+
+betvirtual only serves the latest finished day, so it cannot reach backwards.
+`49s.co.uk` can - the date is in the URL - and every race there carries a
+SportsEvent JSON-LD block with the finishing order, plus the winner's price on
+the page. Cross-checked against a day already held: **108 of 108 winning prices
+identical**.
+
+    BACKFILL.bat                       2026-08-01 to 2026-09-07
+    python vhr_49s.py 2026-08-20       one day
+    python vhr_49s.py 2026-08-01 2026-08-31 --dry-run
+
+**It is resumable.** Before each date it checks whether every track already has a
+full day of winners; days that do are skipped, not re-scraped. Stopping it and
+running it again picks up where it left off, and running it twice cannot
+duplicate anything - the store is keyed by `track|date|time`, so a second visit
+merges into the same record.
+
+Watch it with `WATCH LOG.bat`, which tails `vhr.log`; progress lines are numbered
+`[12/37]`.
+
+### What it can and cannot feed
+
+49s gives the **winner and its price, not the card**. So:
+
+| | |
+|---|---|
+| **BY RACES** | works fully - it only asks how many races passed between wins |
+| **BY CHANCES** | not at all - it needs to know which prices were on offer |
+
+`vhr_stats` keeps the two universes separate already, so a results-only day
+simply never appears in the second one.
+
+One thing to keep in mind when reading BY RACES over this history: a price that
+is **rarely offered** will show enormous gaps, because most of those races never
+gave it a chance. `11/8` sitting 1,574 races without a win says more about how
+seldom it is priced than about it being due. BY CHANCES is the measure that
+corrects for that, and it grows by about 100 races per track per day from the
+cards collected here.
+
+### Writing the store from three places at once
+
+The results collector, the card collector and the backfill all do
+load-change-save on `data/races.json`. Without a lock the slow one saves a stale
+copy over the fast one, and the difference disappears silently. Every writer now
+goes through `vhr_data.update_store`, which reloads under `races.json.lock`
+before applying its changes.
+
 ## Watching it from anywhere
 
     https://vishwaaakash03-coder.github.io/vhr-gap/
