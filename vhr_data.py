@@ -21,6 +21,8 @@ Store: BET/data/races.json
 import json
 import os
 import re
+import time
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
@@ -66,6 +68,51 @@ def save_store(store):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(store, f, separators=(",", ":"))
     os.replace(tmp, STORE)
+
+
+LOCK_PATH = STORE + ".lock"
+
+
+@contextmanager
+def store_lock(timeout=60):
+    """Serialise store writes.
+
+    The results collector, the card collector and the 49s backfill all do
+    load -> change -> save. Without a lock the slow one saves a stale copy over
+    the fast one and the difference is silently lost.
+    """
+    start = time.time()
+    while True:
+        try:
+            os.close(os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            age = time.time() - os.path.getmtime(LOCK_PATH) if os.path.exists(LOCK_PATH) else 0
+            if age > timeout:                      # holder died; take it over
+                try:
+                    os.remove(LOCK_PATH)
+                except OSError:
+                    pass
+                continue
+            if time.time() - start > timeout:
+                break                              # never block a collector forever
+            time.sleep(0.15)
+    try:
+        yield
+    finally:
+        try:
+            os.remove(LOCK_PATH)
+        except OSError:
+            pass
+
+
+def update_store(change):
+    """Run `change(store)` on a freshly loaded store and save it, under the lock."""
+    with store_lock():
+        store = load_store()
+        result = change(store)
+        save_store(store)
+    return result
 
 
 def upsert(store, track, day, time_str, **fields):

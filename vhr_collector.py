@@ -89,7 +89,11 @@ def cycle(day):
         log(f"  stbet: +{n_stbet} ({describe(status)})")
 
     data.import_state(store, days=[day])
-    data.save_store(store)
+
+    def apply(fresh):
+        for key, rec in store["races"].items():
+            fresh["races"].setdefault(key, {}).update(rec)
+    data.update_store(apply)
 
     after = cards.card_counts(store, day)
     if after != before or not os.path.exists(core.workbook_path(day)):

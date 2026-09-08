@@ -62,7 +62,11 @@ def pending_races(store):
 
 
 def poll_once(store=None):
-    """Fetch every outstanding result. Returns how many were added."""
+    """Fetch every outstanding result. Returns how many were added.
+
+    The store is loaded and saved under `data.store_lock`, because the card
+    collector and the 49s backfill write the same file.
+    """
     store = store or data.load_store()
 
     # Pull the current card into the store first. A race needs both halves -
@@ -90,7 +94,11 @@ def poll_once(store=None):
             added += 1
 
     if added or carded:
-        data.save_store(store)
+        # Re-apply onto a fresh copy: something else may have written meanwhile.
+        def apply(fresh):
+            for key, rec in store["races"].items():
+                fresh["races"].setdefault(key, {}).update(rec)
+        data.update_store(apply)
     if added:
         log(f"+{added} results ({len(todo) - added} still unsettled)")
     return added
