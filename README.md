@@ -38,36 +38,44 @@ To remove the automation:
 
     Unregister-ScheduledTask -TaskName "VHR Collector" -Confirm:$false
 
-## How the card scrape knows when to run
+## Where the card comes from
 
-STBET swaps the card between **04:30 and 05:00** LK: the finished races vanish
-and the next day appears. Until that happens the site is still serving the
-**finished** card — 70-odd races in total, but almost none left to run — so
-readiness is measured in races that have **not started yet**, more than
-`CARD_READY_MIN` (20) on every track.
+The workbook is printed at 04:30 and worked from all day, so it has to be
+complete at 04:30. STBET is not:
 
-**The swap does not deliver the whole day.** Measured on 2026-09-08:
+    on STBET's card at 04:30   219 races
+    on STBET's card at 08:15   302 races      28% arrived later
 
-    on the card at 04:30   219 races
-    on the card at 08:15   302 races      28% arrived later
+**betvirtual.co** publishes the whole day at once, for all three tracks, and its
+prices agree with STBET exactly — 218 races cross-checked on 2026-09-07, every
+winning price identical. So it is the primary source:
 
-A. McLean Bookmakers, showing the same feed at
-`amcleanbookmakers.com/betting-competition/virtual-racing-portman-park/812/`,
-listed all 302 from early on — same horses, same prices, confirming the races
-are real and STBET simply publishes them late.
+| Source | What it gives | When |
+|---|---|---|
+| `betvirtual.co` | the whole day's card, all three tracks, plus the previous day's complete results | every cycle |
+| STBET | whatever it has so far, and the event ids the results collector needs | every cycle |
 
-So after the morning build the collector keeps topping up every `TOPUP_SECS`
-(15 min) until the next rollover. `collect()` only ever adds, so a top-up is
-just another merge; the workbook is rewritten only when something new actually
-appeared.
+`upsert` only ever adds, so whichever source sees a race first wins and the
+other confirms it. Times on betvirtual are UK and are converted with the real
+zone rules, not a fixed offset, so the sheet stays right through the October
+clock change.
 
-This is what the old `race\days\auto_scheduler.py` got wrong. Its probe counted
-*total* races:
+STBET's own readiness rule still applies to its half: until the 04:30–05:00 swap
+the site serves the **finished** card — full-looking, but with nothing left to
+run — so readiness is counted in races that have **not started yet**, more than
+`CARD_READY_MIN` (20) per track. Counting total races instead is what made the
+old `race\daysuto_scheduler.py` scrape a dead day at 04:30:02.
 
-    [2026-08-31 04:30:02] Site probe: Portman Park:76, SprintValley:75,
-                          Steepledowns:70 (need 30+ on 2+ tracks) — READY
+### Cloudflare
 
-Those 76 were the dead card, so it scraped an already-finished day.
+betvirtual is behind Cloudflare. Plain `requests`, browser-impersonating TLS
+(`curl_cffi`), and headless Chrome are all refused; only a real browser window
+gets through. So the fetch runs Chrome with its window parked at
+`--window-position=-32000,-32000` — a real window, off the visible desktop.
+Nothing appears on screen, and it is needed a few times an hour, not constantly.
+
+Requires `pip install playwright` and a normal Chrome install (it uses
+`channel="chrome"`, so there is no separate browser download).
 
 ## The gap analysis
 
