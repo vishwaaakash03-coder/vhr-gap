@@ -40,13 +40,26 @@ To remove the automation:
 
 ## How the card scrape knows when to run
 
-STBET swaps the whole 24-hour card in one go, normally between **04:30 and
-05:00** LK. Races are not added during the day, so the card only needs scraping
-once — but only after the swap.
+STBET swaps the card between **04:30 and 05:00** LK: the finished races vanish
+and the next day appears. Until that happens the site is still serving the
+**finished** card — 70-odd races in total, but almost none left to run — so
+readiness is measured in races that have **not started yet**, more than
+`CARD_READY_MIN` (20) on every track.
 
-Until it happens the site is still serving the **finished** card: 70-odd races in
-total, but almost none left to run. So readiness is measured in races that have
-**not started yet** — more than `CARD_READY_MIN` (20) on every track.
+**The swap does not deliver the whole day.** Measured on 2026-09-08:
+
+    on the card at 04:30   219 races
+    on the card at 08:15   302 races      28% arrived later
+
+A. McLean Bookmakers, showing the same feed at
+`amcleanbookmakers.com/betting-competition/virtual-racing-portman-park/812/`,
+listed all 302 from early on — same horses, same prices, confirming the races
+are real and STBET simply publishes them late.
+
+So after the morning build the collector keeps topping up every `TOPUP_SECS`
+(15 min) until the next rollover. `collect()` only ever adds, so a top-up is
+just another merge; the workbook is rewritten only when something new actually
+appeared.
 
 This is what the old `race\days\auto_scheduler.py` got wrong. Its probe counted
 *total* races:

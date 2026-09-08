@@ -41,22 +41,22 @@ def log(msg):
 
 
 def supervise(name, fn, argv):
-    """Keep one part running. A crash costs a restart, not the whole service."""
+    """Keep one part running. Every part is an endless loop, so returning is as
+    much a failure as raising - both get restarted rather than silently lost."""
     while True:
         try:
             fn(argv)
-            log(f"{name} exited cleanly")
-            return
+            log(f"{name} stopped on its own - restarting in {RESTART_DELAY}s")
         except Exception as e:
             log(f"{name} crashed: {type(e).__name__}: {e} - restarting in {RESTART_DELAY}s")
-            time.sleep(RESTART_DELAY)
+        time.sleep(RESTART_DELAY)
 
 
 # STBET refuses every request from outside Sri Lanka, so the collecting cannot
 # be moved to a cloud runner - only the finished page travels.
 PARTS = [
-    ("card collector",    vhr_collector.main, []),
-    ("results collector", vhr_results.main,   []),
+    ("card collector",    vhr_collector.main, ["--no-lock"]),
+    ("results collector", vhr_results.main,   ["--no-lock"]),
     ("gap dashboard",     vhr_dashboard.main, ["--no-open"]),
     ("publisher",         vhr_publish.main,   ["--loop"]),
 ]

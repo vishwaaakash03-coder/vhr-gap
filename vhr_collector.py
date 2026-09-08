@@ -6,16 +6,20 @@ VHR collector - one Excel workbook per race day, built the morning the card drop
     python vhr_collector.py --once     scrape whatever is on the card now and exit
     python vhr_collector.py --day 2026-08-31   work on a specific card date
 
-STBET swaps the whole 24-hour card in one go, normally between 04:30 and 05:00
-LK time - the finished races vanish and the next 24 hours appear together. It
-does not add races during the day, so the card only has to be scraped once.
+STBET swaps the card between 04:30 and 05:00 LK: the finished races vanish and
+the next day appears. Knowing *when* that has happened is the first problem.
+Until it does, the site is still serving the finished card - 70-odd races in
+total, but none of them left to run - so readiness is measured in races that
+have not started yet. More than CARD_READY_MIN of them on every track means the
+new card is up. (Counting total races instead is what made the old scheduler
+scrape the dead card at 04:30:02 and come away with an incomplete day.)
 
-The catch is knowing when the swap has happened. Until it does, the site is
-still serving the *finished* card: 70-odd races in total, but none of them left
-to run. So readiness is measured in races that have not started yet - more than
-CARD_READY_MIN of them on every track means the new card is up. (Counting total
-races instead is what made the old scheduler scrape the dead card at 04:30:02
-and come away with an incomplete day.)
+The second problem is that the swap does not deliver the whole day. Measured on
+2026-09-08: 219 races on the card at 04:30, 302 on it by 08:15 - 28% of the day
+arrives later, and a bookmaker showing the same feed listed all 302 from early
+on. So after the morning build the collector keeps topping up every TOPUP_SECS
+until the next rollover, merging whatever has appeared and rewriting the
+workbook only when something actually has.
 """
 
 import os
@@ -27,6 +31,7 @@ from datetime import datetime, timedelta
 import vhr_core as core
 
 POLL_SECS      = 300     # 5 minutes, from 04:30 until the new card appears
+TOPUP_SECS     = 900     # 15 minutes, for the rest of the day
 CARD_READY_MIN = 20      # more not-yet-run races than this on every track = new card is up
 LOG_PATH  = os.path.join(core.BASE_DIR, "vhr.log")
 LOCK_PATH = os.path.join(core.BASE_DIR, ".vhr.lock")
@@ -52,16 +57,23 @@ def card_is_ready(status):
             and all(v["upcoming"] > CARD_READY_MIN for v in status.values()))
 
 
-def build_day(day, state):
-    """Scrape the whole card and write the workbook. Returns {track: n_races}."""
+def build_day(day, state, quiet=False):
+    """Merge whatever is on the card into `state` and rewrite the workbook.
+
+    Used for the morning build and for every top-up after it - `collect` only
+    ever adds, so re-running it is how new races reach the sheet.
+    """
     n_new, n_filled = core.collect(day, state, log=log)
+    if quiet and not n_new:
+        return None                      # nothing appeared; leave the file alone
     path, counts = core.build_workbook(day, state, core.workbook_path(day))
     if not path:
         log("  nothing priced yet - will try again")
         return {}
 
     total = sum(counts.values())
-    log(f"  {total} races ({', '.join(f'{t}: {c}' for t, c in counts.items())})")
+    grew = f"+{n_new} new, " if quiet else ""
+    log(f"  {grew}{total} races ({', '.join(f'{t}: {c}' for t, c in counts.items())})")
     log(f"  saved {os.path.basename(path)}")
 
     # A short card means the swap was caught mid-flight; leave the day unmarked
@@ -104,7 +116,7 @@ def touch_lock():
 
 
 def nap(seconds):
-    """Sleep in poll-sized pieces so the lock stays fresh and Ctrl+C still works."""
+    """Sleep in short pieces so the lock stays fresh and Ctrl+C still works."""
     end = time.time() + seconds
     while time.time() < end:
         touch_lock()
@@ -131,7 +143,11 @@ def main(argv=None):
         build_day(day, core.load_state(day))
         return
 
-    if not acquire_lock():
+    # Under vhr_service.py every part shares one process, and the service
+    # holds the only lock that matters. Taking a second one here made a
+    # restart race with its own previous instance: the lock was still warm,
+    # this part exited, and nothing restarted it.
+    if "--no-lock" not in args and not acquire_lock():
         return
 
     log("VHR collector started.")
@@ -155,10 +171,13 @@ def main(argv=None):
                     log(f"  {day} workbook already complete ({sum(have)} races)")
 
             if state.get("built_at"):
+                # Built, but not finished: races keep being added all day.
+                try:
+                    build_day(day, state, quiet=True)
+                except Exception as e:
+                    log(f"  top-up failed: {e}")
                 wait = (next_rollover() - datetime.now()).total_seconds()
-                log(f"  {day} already done at {state['built_at']} - "
-                    f"next card in {wait / 3600:.1f} h")
-                nap(max(60, wait))
+                nap(min(TOPUP_SECS, max(60, wait)))
                 continue
 
             try:

@@ -124,7 +124,11 @@ def main(argv=None):
         log(f"single pass - {n} added")
         return
 
-    if not acquire_lock():
+    # Under vhr_service.py every part shares one process, and the service
+    # holds the only lock that matters. Taking a second one here made a
+    # restart race with its own previous instance: the lock was still warm,
+    # this part exited, and nothing restarted it.
+    if "--no-lock" not in args and not acquire_lock():
         return
 
     log(f"collector started, polling every {POLL_SECS // 60} min")
