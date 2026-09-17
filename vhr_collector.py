@@ -28,6 +28,7 @@ from datetime import datetime
 import vhr_cards as cards
 import vhr_core as core
 import vhr_data as data
+import vhr_whatsapp as whatsapp
 
 POLL_SECS      = 300     # 5 minutes, while waiting for the day's card
 TOPUP_SECS     = 900     # 15 minutes, once the card is complete
@@ -184,6 +185,10 @@ def main(argv=None):
                 total = sum(counts.values())
                 log(f"  {day}: {total} races {counts}"
                     + ("  [complete]" if full else "  [still filling]"))
+                # The first complete card of the day goes out on WhatsApp.
+                # Once per day; a failure is retried on the next cycle.
+                if full:
+                    whatsapp.send_if_due(day, counts, log=log)
             except Exception as e:
                 log(f"  cycle failed: {type(e).__name__}: {e}")
                 if "--debug" in args:

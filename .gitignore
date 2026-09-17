@@ -5,6 +5,9 @@ days/
 cloud-data/
 site/
 
+# The WhatsApp Web session - this IS the login, never publish it
+whatsapp_profile/
+
 # Runtime
 *.log
 .vhr*.lock

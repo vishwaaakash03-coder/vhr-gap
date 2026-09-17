@@ -14,7 +14,7 @@ One Windows scheduled task, **VHR Collector**, starts `vhr_service.py` at
 
 | Part | What it does |
 |---|---|
-| card collector | waits for the 04:30 card swap, then scrapes the whole 24-hour card into `days/VHR Racecards YYYY.MM.DD.xlsx` |
+| card collector | waits for the 04:30 card swap, scrapes the whole 24-hour card into `days/VHR Racecards YYYY.MM.DD.xlsx`, then sends it on WhatsApp |
 | results collector | every 2 minutes: merges the live card into the race store, then records which odds won each finished race |
 | gap dashboard | serves the analysis at `http://localhost:8770` |
 
@@ -33,6 +33,8 @@ service process with three threads.
 | `START VHR.bat` / `STOP VHR.bat` | start / stop everything |
 | `RUN NOW.bat` | scrape whatever is on the card right now |
 | `CHECK SITE.bat` | not-yet-run / total races per track |
+| `WHATSAPP LOGIN.bat` | link this PC to WhatsApp - once, scan a QR |
+| `SEND TO WHATSAPP.bat` | send today's workbook again by hand |
 
 To remove the automation:
 
@@ -76,6 +78,32 @@ Nothing appears on screen, and it is needed a few times an hour, not constantly.
 
 Requires `pip install playwright` and a normal Chrome install (it uses
 `channel="chrome"`, so there is no separate browser download).
+
+## Sending the sheet on WhatsApp
+
+The first time the card is complete for the day, the workbook goes to the
+contact **Akash** with a one-line caption (`VHR Racecards 2026.09.17 - 312
+races (Portman 105, Sprint 103, Steepledowns 104)`). Once per day: the send is
+recorded in `data/whatsapp_sent.json`, and a failed one is retried on the next
+cycle, up to six times, after which `SEND TO WHATSAPP.bat` does it by hand.
+
+WhatsApp Web keeps its login in the browser profile, so `vhr_whatsapp.py`
+drives a Chrome of its own with a persistent profile under `whatsapp_profile/`.
+That profile **is** the WhatsApp session - it is gitignored and must stay that
+way, since the repo is public. Linking it is a one-time job:
+
+    WHATSAPP LOGIN.bat        opens the QR in a visible window; scan it from
+                              WhatsApp > Linked devices > Link a device
+
+After that the window is parked off-screen like the others. WhatsApp only
+unlinks a device after about two weeks without use, and this one is used every
+morning. If it ever does come unlinked, the collector logs it and shows one
+message box for the day saying which `.bat` to run - the one case where a
+person is genuinely needed.
+
+The contact is matched by its exact chat name (`CONTACT` in `vhr_whatsapp.py`),
+and the file is confirmed sent only once it appears in the chat without the
+pending clock.
 
 ## The gap analysis
 
@@ -235,6 +263,7 @@ at all; until then it reads `NEW`, and the dashboard says so under the table.
 | Dashboard port (8770) | `vhr_dashboard.py` → `PORT` |
 | Signal bands | `vhr_stats.py` → `SIGNAL_BANDS` |
 | Card rollover (04:30) | `vhr_core.py` → `CARD_ROLLOVER` |
+| WhatsApp contact (`Akash`) / on-off | `vhr_whatsapp.py` → `CONTACT`, `ENABLED` |
 | Hidden odds columns | `vhr_core.py` → `ODDS_HIDE` |
 | Track colours | `vhr_core.py` → `TRACK_COLORS` |
 
