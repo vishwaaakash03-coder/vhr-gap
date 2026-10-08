@@ -102,8 +102,25 @@ message box for the day saying which `.bat` to run - the one case where a
 person is genuinely needed.
 
 The contact is matched by its exact chat name (`CONTACT` in `vhr_whatsapp.py`),
-and the file is confirmed sent only once it appears in the chat without the
-pending clock.
+and the file is confirmed sent only once it appears in the chat as an outgoing
+message whose own status label reads sent, delivered or read.
+
+WhatsApp Web redraws its markup every few months, so every hook in the module
+is a list of alternatives and each is checked against the live page when it
+breaks. What it has already changed once:
+
+| | was | is |
+|---|---|---|
+| search box | `div[contenteditable]` | a real `<input>` |
+| chat header | `span[title="Akash"]` | a bare `<span>`, matched on its text |
+| attach button | `span[data-icon="clip"]` | `button[aria-label="Attach"]` |
+| sent message | `.message-out` | a `[role="row"]` with a `tail-out` bubble |
+
+It also throws up a "What's new on WhatsApp Web" modal after an idle spell,
+which sits over the chat list and swallows every click; `_dismiss_dialogs`
+clears that before anything else. If a status label is ever renamed again the
+send is **not** treated as a failure once the file is visibly in the chat -
+resending the same sheet twice is the worse mistake.
 
 ## The gap analysis
 

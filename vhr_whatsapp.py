@@ -53,12 +53,16 @@ VISIBLE_ARGS = [a for a in OFFSCREEN_ARGS if not a.startswith("--window-position
 # of alternatives. Playwright takes them as one comma-separated CSS selector.
 SEL_LOGGED_IN = '#pane-side, [aria-label="Chat list"]'
 SEL_QR        = 'canvas[aria-label], [data-ref], canvas'
-SEL_SEARCH    = ('div[contenteditable="true"][data-tab="3"], '
+# WhatsApp turned the search box from a contenteditable div into a real <input>
+# in late 2026, which is why only the data-tab and the fuzzy label match survive.
+SEL_SEARCH    = ('input[data-tab="3"], div[contenteditable="true"][data-tab="3"], '
+                 'input[aria-label*="Search" i], input[placeholder*="Search" i], '
                  '[aria-label="Search input textbox"], '
-                 '[aria-placeholder="Search or start a new chat"], '
                  'div[contenteditable="true"][aria-label*="Search" i]')
-SEL_ATTACH    = ('#main button[title="Attach"], #main [aria-label="Attach"], '
-                 '#main span[data-icon="plus"], #main span[data-icon="clip"], '
+SEL_ATTACH    = ('footer button[aria-label="Attach"], #main [aria-label="Attach"], '
+                 '#main button[title="Attach"], '
+                 'span[data-icon="ic-attach-file"], #main span[data-icon="clip"], '
+                 '#main span[data-icon="plus"], '
                  '#main span[data-icon="attach-menu-plus"], '
                  '#main span[data-icon="plus-rounded"]')
 SEL_CAPTION   = ('div[contenteditable="true"][aria-label*="caption" i], '
@@ -66,6 +70,12 @@ SEL_CAPTION   = ('div[contenteditable="true"][aria-label*="caption" i], '
 SEL_SEND      = ('[aria-label="Send"], span[data-icon="send"], '
                  'span[data-icon="wds-ic-send-filled"]')
 SEL_PENDING   = '#main span[data-icon="msg-time"]'
+
+# WhatsApp Web greets a long-idle session with a "What's new" modal, which sits
+# over the chat list and swallows every click. Anything that only dismisses an
+# announcement is safe to press; nothing here agrees to or changes anything.
+DISMISS_WORDS = ("Continue", "Close", "OK", "Got it", "Not now", "Later",
+                 "Maybe later", "Dismiss")
 
 
 def log(msg):
@@ -133,20 +143,47 @@ def _wait_logged_in(page, timeout_s):
     return page.locator(SEL_LOGGED_IN).count() > 0
 
 
+def _dismiss_dialogs(page, rounds=3):
+    """Clear any announcement modal standing over the chat list."""
+    for _ in range(rounds):
+        dialogs = page.locator('[role="dialog"]')
+        if not dialogs.count():
+            return
+        clicked = False
+        for word in DISMISS_WORDS:
+            btn = dialogs.first.get_by_role("button", name=word, exact=True)
+            if btn.count():
+                btn.first.click()
+                clicked = True
+                break
+        if not clicked:
+            page.keyboard.press("Escape")
+        page.wait_for_timeout(800)
+
+
 def _open_chat(page, contact):
+    _dismiss_dialogs(page)
     box = page.locator(SEL_SEARCH).first
     box.wait_for(state="visible", timeout=30000)
     box.click()
     page.keyboard.press("Control+A")
     page.keyboard.press("Backspace")
     page.keyboard.type(contact, delay=40)
+    page.wait_for_timeout(1200)          # let the result list settle
     # Click the exact-titled result rather than pressing Enter, which would
     # happily open whatever came first.
     hit = page.locator(f'#pane-side span[title="{contact}"]').first
     hit.wait_for(state="visible", timeout=20000)
     hit.click()
-    page.locator(f'#main header span[title="{contact}"]').first.wait_for(
-        state="visible", timeout=20000)
+    # The header used to carry title="<contact>"; it is a bare span now, so the
+    # chat is confirmed by what the header reads instead of by an attribute.
+    header = page.locator("#main header").first
+    header.wait_for(state="visible", timeout=20000)
+    for _ in range(20):
+        if contact.lower() in (header.inner_text() or "").lower():
+            return
+        page.wait_for_timeout(500)
+    raise RuntimeError(f"opened a chat, but its header does not read {contact!r}")
 
 
 def _attach(page, path):
@@ -181,15 +218,43 @@ def _send_preview(page, caption):
     send.click()
 
 
-def _wait_delivered(page, basename, timeout_s=90):
-    """The file shows in the chat as an outgoing message with no pending clock."""
+# An outgoing row is the one with the tail-out bubble or a "You:" label, and it
+# carries its own status as an aria-label. The old .message-out class is gone.
+JS_DELIVERED = r"""
+(name) => {
+  const rows = [...document.querySelectorAll('#main [role="row"]')];
+  for (let i = rows.length - 1; i >= 0 && i > rows.length - 12; i--) {
+    const r = rows[i];
+    if (!(r.innerText || '').includes(name)) continue;
+    const mine = r.querySelector('[data-icon="tail-out"]')
+              || [...r.querySelectorAll('[aria-label]')].some(
+                   e => /^\s*you:/i.test(e.getAttribute('aria-label') || ''));
+    if (!mine) continue;
+    if (r.querySelector('[data-icon="msg-time"]')) return 'pending';
+    const labels = [...r.querySelectorAll('[aria-label]')]
+      .map(e => (e.getAttribute('aria-label') || '').trim().toLowerCase());
+    if (labels.some(l => ['sent', 'delivered', 'read', 'played'].includes(l)))
+      return 'done';
+    return 'unknown';
+  }
+  return 'missing';
+}
+"""
+
+
+def _wait_delivered(page, basename, timeout_s=120):
+    """The file shows in the chat as an outgoing message that has left pending."""
     end = time.time() + timeout_s
+    state = "missing"
     while time.time() < end:
         page.wait_for_timeout(1000)
-        outgoing = page.locator("#main .message-out").filter(has_text=basename)
-        if outgoing.count() and not page.locator(SEL_PENDING).count():
+        state = page.evaluate(JS_DELIVERED, basename)
+        if state == "done":
             return True
-    return False
+    # 'unknown' means the row is there and not pending, but WhatsApp has renamed
+    # its status labels again. The file is in the chat, so do not call it a
+    # failure and resend it; a resend is the worse mistake.
+    return state == "unknown"
 
 
 def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
