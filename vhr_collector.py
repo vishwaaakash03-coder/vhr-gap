@@ -33,6 +33,7 @@ import vhr_whatsapp as whatsapp
 POLL_SECS      = 300     # 5 minutes, while waiting for the day's card
 TOPUP_SECS     = 900     # 15 minutes, once the card is complete
 CARD_READY_MIN = 20      # not-yet-run races per track that mean STBET has swapped
+SEND_SETTLE    = 3       # cycles with an unchanged card that mean it has stopped growing
 LOG_PATH  = os.path.join(core.BASE_DIR, "vhr.log")
 LOCK_PATH = os.path.join(core.BASE_DIR, ".vhr.lock")
 
@@ -174,20 +175,28 @@ def main(argv=None):
     log("VHR collector started.")
     log(f"  card day {day}, betvirtual primary, STBET behind it")
 
+    settled_for, last_counts, last_day = 0, None, day
     try:
         while True:
             touch_lock()
             day = core.card_day()
+            if day != last_day:
+                settled_for, last_counts, last_day = 0, None, day
             full = False
             try:
                 counts = cycle(day)
                 full = cards.is_full(counts)
+                settled_for = settled_for + 1 if counts == last_counts else 0
+                last_counts = counts
                 total = sum(counts.values())
                 log(f"  {day}: {total} races {counts}"
                     + ("  [complete]" if full else "  [still filling]"))
-                # The first complete card of the day goes out on WhatsApp.
-                # Once per day; a failure is retried on the next cycle.
-                if full:
+                # The card goes out on WhatsApp once it is whole: either it has
+                # reached a normal day's size, or it has stopped growing and
+                # holds a day's racing on all three tracks. Tying this to
+                # is_full alone meant a genuinely short day - 89/87/88 on
+                # 2026-10-10, settled by 04:36 - was never sent at all.
+                if full or (settled_for >= SEND_SETTLE and cards.is_sendable(counts)):
                     whatsapp.send_if_due(day, counts, log=log)
             except Exception as e:
                 log(f"  cycle failed: {type(e).__name__}: {e}")

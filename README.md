@@ -81,11 +81,39 @@ Requires `pip install playwright` and a normal Chrome install (it uses
 
 ## Sending the sheet on WhatsApp
 
-The first time the card is complete for the day, the workbook goes to the
-contact **Akash** with a one-line caption (`VHR Racecards 2026.09.17 - 312
-races (Portman 105, Sprint 103, Steepledowns 104)`). Once per day: the send is
-recorded in `data/whatsapp_sent.json`, and a failed one is retried on the next
-cycle, up to six times, after which `SEND TO WHATSAPP.bat` does it by hand.
+Once the day's card is whole, the workbook goes to the contact **Akash** with
+a one-line caption (`VHR Racecards 2026.09.17 - 312 races (Portman 105, Sprint
+103, Steepledowns 104)`), and is then **deleted from our own side** so only
+Akash keeps it. Once per day: the send is recorded in
+`data/whatsapp_sent.json`, and a failed one is retried on the next cycle, up to
+six times, after which `SEND TO WHATSAPP.bat` does it by hand.
+
+"Whole" is not simply `FULL_CARD_MIN`. A day that is genuinely short - 89/87/88
+on 2026-10-10, settled by 04:36 and never moving again - is still a whole day,
+and tying the send to `is_full` alone meant it was never sent at all. So the
+send also fires when the card has been **unchanged for three cycles** and holds
+at least `SENDABLE_MIN` races on each of the three tracks.
+
+### Deleting it again afterwards
+
+`delete_for_me` removes the sent file from this account's copy of the chat:
+right-click the row, Delete, the bin in the selection bar, then the
+confirmation button reading exactly **Delete for me**. The contact's copy is
+untouched.
+
+This is the whole of what WhatsApp allows. A linked device is not a separate
+mailbox - the PC and the phone are one account - so a deletion on either
+reaches both, and there is no way to clear the PC while keeping the phone's
+copy. The consequence worth knowing: **the sheet will not stay on the phone
+either.** Whether it went is answered by `vhr.log` and by
+
+    python vhr_whatsapp.py --status
+
+"Delete for everyone" would take the sheet back from Akash, so the
+confirmation button is matched on its exact text and anything naming
+'everyone' is refused rather than clicked. The delete only runs after the
+message is confirmed delivered - deleting one still in flight would cancel it
+instead.
 
 WhatsApp Web keeps its login in the browser profile, so `vhr_whatsapp.py`
 drives a Chrome of its own with a persistent profile under `whatsapp_profile/`.
@@ -113,6 +141,7 @@ breaks. What it has already changed once:
 |---|---|---|
 | search box | `div[contenteditable]` | a real `<input>` |
 | chat header | `span[title="Akash"]` | a bare `<span>`, matched on its text |
+| tooltips | harmless | intercept clicks; park the mouse first |
 | attach button | `span[data-icon="clip"]` | `button[aria-label="Attach"]` |
 | sent message | `.message-out` | a `[role="row"]` with a `tail-out` bubble |
 
@@ -279,6 +308,8 @@ at all; until then it reads `NEW`, and the dashboard says so under the table.
 | Results poll (2 min) | `vhr_results.py` → `POLL_SECS` |
 | Dashboard port (8770) | `vhr_dashboard.py` → `PORT` |
 | Signal bands | `vhr_stats.py` → `SIGNAL_BANDS` |
+| Delete after sending | `vhr_whatsapp.py` → `DELETE_AFTER` |
+| Card settled (3 cycles) | `vhr_collector.py` → `SEND_SETTLE` |
 | Card rollover (04:30) | `vhr_core.py` → `CARD_ROLLOVER` |
 | WhatsApp contact (`Akash`) / on-off | `vhr_whatsapp.py` → `CONTACT`, `ENABLED` |
 | Hidden odds columns | `vhr_core.py` → `ODDS_HIDE` |

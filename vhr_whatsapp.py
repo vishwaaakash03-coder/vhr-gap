@@ -33,6 +33,7 @@ import vhr_core as core
 
 CONTACT      = "Akash"           # exactly as the chat is named in WhatsApp
 ENABLED      = True
+DELETE_AFTER = True              # take the sheet off our own side once it lands
 MAX_ATTEMPTS = 6                 # per day, before waiting for a manual send
 
 PROFILE_DIR = os.path.join(core.BASE_DIR, "whatsapp_profile")
@@ -76,6 +77,14 @@ SEL_PENDING   = '#main span[data-icon="msg-time"]'
 # announcement is safe to press; nothing here agrees to or changes anything.
 DISMISS_WORDS = ("Continue", "Close", "OK", "Got it", "Not now", "Later",
                  "Maybe later", "Dismiss")
+
+# Deleting a sent file: right-click the row, Delete, then the bin in the
+# selection bar, then the one confirmation button that says exactly
+# "Delete for me". Both Deletes carry the same aria-label and are told apart
+# only by their role.
+SEL_MENU_DELETE = '[role="menuitem"][aria-label="Delete"]'
+SEL_BAR_DELETE  = '#main button[aria-label="Delete"]:not([role="menuitem"])'
+DELETE_FOR_ME   = "Delete for me"
 
 
 def log(msg):
@@ -143,6 +152,26 @@ def _wait_logged_in(page, timeout_s):
     return page.locator(SEL_LOGGED_IN).count() > 0
 
 
+def _click(page, locator, timeout=30000):
+    """Click, with WhatsApp's hover tooltips moved out of the way first.
+
+    Tooltips are injected into #wa-popovers-bucket wherever the pointer happens
+    to rest, and one sitting over the target is enough to make Playwright's
+    actionability check spin until it times out. Parking the mouse in the
+    corner clears them; the bucket is empty whenever nothing is hovered.
+    """
+    locator.wait_for(state="visible", timeout=timeout)
+    for attempt in range(3):
+        page.mouse.move(4, 4)
+        page.wait_for_timeout(250)
+        try:
+            locator.click(timeout=10000)
+            return
+        except Exception:
+            if attempt == 2:
+                locator.click(timeout=10000, force=True)
+
+
 def _dismiss_dialogs(page, rounds=3):
     """Clear any announcement modal standing over the chat list."""
     for _ in range(rounds):
@@ -164,8 +193,7 @@ def _dismiss_dialogs(page, rounds=3):
 def _open_chat(page, contact):
     _dismiss_dialogs(page)
     box = page.locator(SEL_SEARCH).first
-    box.wait_for(state="visible", timeout=30000)
-    box.click()
+    _click(page, box)
     page.keyboard.press("Control+A")
     page.keyboard.press("Backspace")
     page.keyboard.type(contact, delay=40)
@@ -173,8 +201,7 @@ def _open_chat(page, contact):
     # Click the exact-titled result rather than pressing Enter, which would
     # happily open whatever came first.
     hit = page.locator(f'#pane-side span[title="{contact}"]').first
-    hit.wait_for(state="visible", timeout=20000)
-    hit.click()
+    _click(page, hit, timeout=20000)
     # The header used to carry title="<contact>"; it is a bare span now, so the
     # chat is confirmed by what the header reads instead of by an attribute.
     header = page.locator("#main header").first
@@ -187,7 +214,7 @@ def _open_chat(page, contact):
 
 
 def _attach(page, path):
-    page.locator(SEL_ATTACH).first.click()
+    _click(page, page.locator(SEL_ATTACH).first)
     page.wait_for_timeout(600)
     # Prefer the "Document" entry: it takes any file type. The plain file input
     # WhatsApp renders is the fallback, picking the one that accepts anything.
@@ -210,12 +237,13 @@ def _attach(page, path):
 def _send_preview(page, caption):
     send = page.locator(SEL_SEND).last
     send.wait_for(state="visible", timeout=30000)
+    page.mouse.move(4, 4)
     if caption:
         cap = page.locator(SEL_CAPTION)
         if cap.count():
             cap.first.click()
             page.keyboard.type(caption, delay=10)
-    send.click()
+    _click(page, send)
 
 
 # An outgoing row is the one with the tail-out bubble or a "You:" label, and it
@@ -243,18 +271,74 @@ JS_DELIVERED = r"""
 
 
 def _wait_delivered(page, basename, timeout_s=120):
-    """The file shows in the chat as an outgoing message that has left pending."""
+    """'done' once the row shows a sent/delivered/read status.
+
+    'unknown' means the row is there and not pending, but WhatsApp has renamed
+    its status labels again - the file is in the chat, so that is not a failure
+    and must not trigger a resend; a resend is the worse mistake. It is not
+    good enough to delete on, though.
+    """
     end = time.time() + timeout_s
     state = "missing"
     while time.time() < end:
         page.wait_for_timeout(1000)
         state = page.evaluate(JS_DELIVERED, basename)
         if state == "done":
-            return True
-    # 'unknown' means the row is there and not pending, but WhatsApp has renamed
-    # its status labels again. The file is in the chat, so do not call it a
-    # failure and resend it; a resend is the worse mistake.
-    return state == "unknown"
+            return state
+    return state
+
+
+def _row_for(page, basename):
+    return page.locator('#main [role="row"]').filter(has_text=basename).last
+
+
+def delete_for_me(page, basename, log=log):
+    """Take the sent file off this account's own side, leaving the contact's.
+
+    "Delete for me" removes it from everywhere this account reads - this PC and
+    the phone, which are one account - while the copy already delivered to the
+    contact stays. "Delete for everyone" would take the sheet back from the
+    person it was sent to, which is the opposite of the point, so the
+    confirmation button is matched on its exact text and anything mentioning
+    'everyone' is refused outright rather than clicked.
+    """
+    row = _row_for(page, basename)
+    if not row.count():
+        log(f"nothing to delete - {basename} is not in the chat")
+        return False
+    try:
+        row.scroll_into_view_if_needed()
+        row.hover()
+        page.wait_for_timeout(500)
+        row.click(button="right")
+        page.wait_for_timeout(800)
+        _click(page, page.locator(SEL_MENU_DELETE).first, timeout=15000)
+        page.wait_for_timeout(800)
+        _click(page, page.locator(SEL_BAR_DELETE).first, timeout=15000)
+
+        dialog = page.locator('[role="dialog"]').first
+        dialog.wait_for(state="visible", timeout=15000)
+        btn = dialog.get_by_role("button", name=DELETE_FOR_ME, exact=True).first
+        if not btn.count():
+            btn = dialog.locator("button").filter(has_text=DELETE_FOR_ME).first
+        label = (btn.inner_text() or "").strip()
+        if label.casefold() != DELETE_FOR_ME.casefold():
+            raise RuntimeError(f"refusing to press {label!r} - expected {DELETE_FOR_ME!r}")
+        _click(page, btn, timeout=15000)
+
+        for _ in range(20):
+            page.wait_for_timeout(500)
+            if not _row_for(page, basename).count():
+                log(f"deleted {basename} from our side (the contact keeps it)")
+                return True
+        raise RuntimeError("the message is still in the chat")
+    except Exception as e:
+        log(f"delete failed: {type(e).__name__}: {e}")
+        # Never leave the chat sitting in selection mode.
+        for _ in range(3):
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+        return False
 
 
 def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
@@ -262,6 +346,7 @@ def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
     from playwright.sync_api import sync_playwright
 
     basename = os.path.basename(path)
+    deleted = False
     with sync_playwright() as p:
         ctx, page = _open(p, visible=visible)
         try:
@@ -270,12 +355,18 @@ def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
             _open_chat(page, contact)
             _attach(page, path)
             _send_preview(page, caption)
-            if not _wait_delivered(page, basename):
+            state = _wait_delivered(page, basename)
+            if state not in ("done", "unknown"):
                 raise RuntimeError("the message did not leave the pending state")
             page.wait_for_timeout(1500)      # let the upload finish flushing
+            log(f"sent {basename} to {contact}")
+            # Only once it is definitely delivered: deleting a file that has not
+            # left yet would cancel it instead of tidying up after it.
+            if DELETE_AFTER and state == "done":
+                deleted = delete_for_me(page, basename, log=log)
         finally:
             ctx.close()
-    log(f"sent {basename} to {contact}")
+    return deleted
 
 
 # -- what the collector calls ------------------------------------------------------

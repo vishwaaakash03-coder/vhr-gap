@@ -24,6 +24,7 @@ import vhr_data as data
 
 # A track that has this many races is a full day's card, not a partial one.
 FULL_CARD_MIN = 90
+SENDABLE_MIN  = 60
 
 
 def merge_betvirtual(store, day, log=print):
@@ -90,6 +91,19 @@ def is_full(counts):
     """Every main track showing a whole day's racing."""
     mains = [n for t, n in counts.items() if t in data.TRACK_ORDER]
     return len(mains) >= 3 and all(n >= FULL_CARD_MIN for n in mains)
+
+
+def is_sendable(counts):
+    """Enough of a card to be worth printing and sending.
+
+    FULL_CARD_MIN describes a normal day. Some days are genuinely shorter -
+    2026-10-10 settled at 89/87/88 and never moved again - and a sheet that is
+    the whole of a short day must still go out. So the send asks only for all
+    three tracks with a day's racing on each, and leans on the card having
+    stopped growing to decide that it is done.
+    """
+    mains = [n for t, n in counts.items() if t in data.TRACK_ORDER]
+    return len(mains) >= 3 and all(n >= SENDABLE_MIN for n in mains)
 
 
 def build_workbook(store, day, log=print):
