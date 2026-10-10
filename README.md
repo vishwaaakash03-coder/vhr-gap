@@ -101,6 +101,16 @@ right-click the row, Delete, the bin in the selection bar, then the
 confirmation button reading exactly **Delete for me**. The contact's copy is
 untouched.
 
+Two things it has to get right. A message deleted within a few seconds of
+being sent **comes back** - the delete reaches the client before the send has
+settled, and the sync restores the row - so the delete waits
+`DELETE_SETTLE_S` after delivery and then watches for `DELETE_CONFIRM_S` that
+it stays gone, clearing it again if it does not. And a send that throws
+*after* the file has already left (a tooltip intercepting a later click, say)
+leaves a copy behind, so the chat is checked for the filename before sending
+and every matching row is cleared, not just the newest. Without those two,
+2026-10-10 put four copies of the same sheet in front of the contact.
+
 This is the whole of what WhatsApp allows. A linked device is not a separate
 mailbox - the PC and the phone are one account - so a deletion on either
 reaches both, and there is no way to clear the PC while keeping the phone's
@@ -308,7 +318,7 @@ at all; until then it reads `NEW`, and the dashboard says so under the table.
 | Results poll (2 min) | `vhr_results.py` → `POLL_SECS` |
 | Dashboard port (8770) | `vhr_dashboard.py` → `PORT` |
 | Signal bands | `vhr_stats.py` → `SIGNAL_BANDS` |
-| Delete after sending | `vhr_whatsapp.py` → `DELETE_AFTER` |
+| Delete after sending | `vhr_whatsapp.py` → `DELETE_AFTER`, `DELETE_SETTLE_S` |
 | Card settled (3 cycles) | `vhr_collector.py` → `SEND_SETTLE` |
 | Card rollover (04:30) | `vhr_core.py` → `CARD_ROLLOVER` |
 | WhatsApp contact (`Akash`) / on-off | `vhr_whatsapp.py` → `CONTACT`, `ENABLED` |

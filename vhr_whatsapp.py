@@ -34,6 +34,8 @@ import vhr_core as core
 CONTACT      = "Akash"           # exactly as the chat is named in WhatsApp
 ENABLED      = True
 DELETE_AFTER = True              # take the sheet off our own side once it lands
+DELETE_SETTLE_S = 25             # let the sent message settle before removing it
+DELETE_CONFIRM_S = 12            # and watch that it stays gone
 MAX_ATTEMPTS = 6                 # per day, before waiting for a manual send
 
 PROFILE_DIR = os.path.join(core.BASE_DIR, "whatsapp_profile")
@@ -288,8 +290,12 @@ def _wait_delivered(page, basename, timeout_s=120):
     return state
 
 
+def _rows_for(page, basename):
+    return page.locator('#main [role="row"]').filter(has_text=basename)
+
+
 def _row_for(page, basename):
-    return page.locator('#main [role="row"]').filter(has_text=basename).last
+    return _rows_for(page, basename).last
 
 
 def delete_for_me(page, basename, log=log):
@@ -302,10 +308,39 @@ def delete_for_me(page, basename, log=log):
     confirmation button is matched on its exact text and anything mentioning
     'everyone' is refused outright rather than clicked.
     """
-    row = _row_for(page, basename)
-    if not row.count():
+    n = _rows_for(page, basename).count()
+    if not n:
         log(f"nothing to delete - {basename} is not in the chat")
         return False
+    # A send that threw after the file had already left leaves a second copy
+    # behind, so clear every row carrying this name, not just the newest.
+    if n > 1:
+        log(f"{n} copies of {basename} in the chat - removing all of them")
+    for _ in range(n):
+        if not _delete_one(page, basename, log=log):
+            return False
+
+    # A message deleted within a few seconds of being sent comes back: the
+    # delete reaches the client before the send has finished settling, and the
+    # sync puts the row straight back. Watch for that and clear it again.
+    end = time.time() + DELETE_CONFIRM_S
+    while time.time() < end:
+        page.wait_for_timeout(2000)
+        if _rows_for(page, basename).count():
+            log(f"{basename} came back after the delete - removing it again")
+            if not _delete_one(page, basename, log=log):
+                return False
+            end = time.time() + DELETE_CONFIRM_S
+
+    log(f"deleted {basename} from our side (the contact keeps it)")
+    return True
+
+
+def _delete_one(page, basename, log=log):
+    before = _rows_for(page, basename).count()
+    if not before:
+        return True
+    row = _row_for(page, basename)
     try:
         row.scroll_into_view_if_needed()
         row.hover()
@@ -328,8 +363,7 @@ def delete_for_me(page, basename, log=log):
 
         for _ in range(20):
             page.wait_for_timeout(500)
-            if not _row_for(page, basename).count():
-                log(f"deleted {basename} from our side (the contact keeps it)")
+            if _rows_for(page, basename).count() < before:
                 return True
         raise RuntimeError("the message is still in the chat")
     except Exception as e:
@@ -353,16 +387,26 @@ def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
             if not _wait_logged_in(page, timeout_s=25):
                 raise NotLoggedIn("WhatsApp Web is showing the QR code")
             _open_chat(page, contact)
-            _attach(page, path)
-            _send_preview(page, caption)
+            # A previous attempt can throw after the file has already left -
+            # tooltips intercepting a later click, say. Sending again would put
+            # a second copy in front of the contact, so if the name is already
+            # in the chat, treat it as sent and go straight to tidying up.
+            already = _rows_for(page, basename).count()
+            if already:
+                log(f"{basename} is already in the chat - not sending it again")
+            else:
+                _attach(page, path)
+                _send_preview(page, caption)
             state = _wait_delivered(page, basename)
             if state not in ("done", "unknown"):
                 raise RuntimeError("the message did not leave the pending state")
             page.wait_for_timeout(1500)      # let the upload finish flushing
             log(f"sent {basename} to {contact}")
             # Only once it is definitely delivered: deleting a file that has not
-            # left yet would cancel it instead of tidying up after it.
+            # left yet would cancel it instead of tidying up after it, and one
+            # deleted in the first seconds afterwards simply reappears.
             if DELETE_AFTER and state == "done":
+                page.wait_for_timeout(DELETE_SETTLE_S * 1000)
                 deleted = delete_for_me(page, basename, log=log)
         finally:
             ctx.close()
