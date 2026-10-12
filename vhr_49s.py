@@ -180,7 +180,8 @@ def backfill(start, end, dry_run=False, on_progress=None):
     from playwright.sync_api import sync_playwright
 
     say = on_progress or log
-    totals = {"days": 0, "skipped_days": 0, "added": 0, "updated": 0, "already": 0}
+    totals = {"days": 0, "skipped_days": 0, "failed_days": 0,
+              "added": 0, "updated": 0, "already": 0}
     n_days = (end - start).days + 1
     say(f"backfill {start} -> {end}  ({n_days} days)")
 
@@ -199,11 +200,32 @@ def backfill(start, end, dry_run=False, on_progress=None):
                     day += timedelta(days=1)
                     continue
 
-                found, records = 0, []
-                for code, track in TRACKS.items():
-                    for rec in scrape_track_day(page, day, code, log=say):
-                        found += 1
-                        records.append((track, rec))
+                # One bad day must not end a 92-day run. Anything that escapes
+                # here - a dead page, a browser that went away, a parse that
+                # threw - is logged and skipped; the day stays unfinished, so a
+                # later run picks it up again.
+                try:
+                    found, records = 0, []
+                    for code, track in TRACKS.items():
+                        for rec in scrape_track_day(page, day, code, log=say):
+                            found += 1
+                            records.append((track, rec))
+                except Exception as e:
+                    say(f"[{idx}/{n_days}] {day}: FAILED {type(e).__name__}: {e}")
+                    totals["failed_days"] += 1
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+                    try:
+                        page = browser.new_page()
+                    except Exception:
+                        browser = p.chromium.launch(channel="chrome", headless=False,
+                                                    args=CHROME_ARGS)
+                        page = browser.new_page()
+                        say("  restarted the browser")
+                    day += timedelta(days=1)
+                    continue
 
                 def apply(store, records=records):
                     a = u = k = 0
@@ -252,8 +274,8 @@ def main(argv=None):
     s = backfill(start, end, dry_run=dry)
     after = len(data.load_store()["races"])
     log(f"finished: {s['days']} days scraped, {s['skipped_days']} already done, "
-        f"{s['added']} results-only added, {s['updated']} carded races completed, "
-        f"{s['already']} already known")
+        f"{s['failed_days']} failed, {s['added']} results-only added, "
+        f"{s['updated']} carded races completed, {s['already']} already known")
     log(f"store after : {after} races  ({after - before:+d})")
 
 
