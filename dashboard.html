@@ -113,6 +113,7 @@ tbody tr.in{opacity:0;transform:translateY(4px);animation:rise 260ms var(--ease-
 .hint{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer);padding:12px 14px}
 
 /* ---------- modal ---------- */
+const GAP_TAIL=20;   // how many completed gaps the panel lists
 .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:50;
   display:flex;align-items:center;justify-content:center;padding:24px;
   opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
@@ -137,8 +138,9 @@ tbody tr.in{opacity:0;transform:translateY(4px);animation:rise 260ms var(--ease-
 .m-lbl{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
   margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .g8-wrap{overflow-x:auto}
-.g8{display:grid;gap:1px;background:var(--line);min-width:max-content}
-.g8 > div{background:var(--panel2);padding:12px 10px;text-align:center;min-width:80px}
+.g8{display:grid;gap:1px;background:var(--line);
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+.g8 > div{background:var(--panel2);padding:12px 8px;text-align:center;min-width:0}
 .g8 .n{font-family:var(--sans);font-weight:900;font-size:1.9rem;line-height:1;letter-spacing:-.03em}
 .g8 .d{font-size:10px;letter-spacing:.06em;color:var(--dimmer);margin-top:6px}
 .g8 .now{background:var(--red)}
@@ -184,7 +186,8 @@ footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
   .m-odds{font-size:3rem}
   .m-hd{gap:12px}
   .st .v{font-size:1.4rem}
-  .g8 > div{min-width:66px;padding:10px 6px}
+  .g8{grid-template-columns:repeat(auto-fill,minmax(62px,1fr))}
+  .g8 > div{min-width:0;padding:10px 4px}
   .g8 .n{font-size:1.5rem}
   footer{font-size:11px}
 }
@@ -327,6 +330,7 @@ function renderTable(){
 }
 
 /* ---------- modal ---------- */
+const GAP_TAIL=20;   // how many completed gaps the panel lists
 function openModal(odds){
   const t=DATA.tracks[TRACK];
   const row=t.rows.find(r=>r.odds===odds); if(!row) return;
@@ -335,7 +339,7 @@ function openModal(odds){
   document.getElementById("backdrop").classList.add("on");
   const peak=Math.max(1,...h.gaps.map(g=>g.gap),h.current);
 
-  const tail=h.gaps.slice(-8), n8=tail.length+1;
+  const tail=h.gaps.slice(-GAP_TAIL);
   const last8=tail.map(g=>
     `<div><div class="n">${g.gap}</div><div class="d">${esc(g.date.slice(5))}</div></div>`).join("")
     + `<div class="now"><div class="n">${h.current}</div><div class="d">running</div></div>`;
@@ -363,8 +367,8 @@ function openModal(odds){
       <div class="st"><div class="k">Pctile</div><div class="v">${pct(m.pct)}</div></div>
     </div>
 
-    <div class="m-lbl">[ LAST 8 GAPS ] &nbsp;&rarr;&nbsp; oldest to newest, red = drought running now</div>
-    <div class="g8-wrap"><div class="g8" style="grid-template-columns:repeat(${n8},1fr)">${last8}</div></div>
+    <div class="m-lbl">[ LAST ${tail.length} GAPS ] &nbsp;&rarr;&nbsp; oldest to newest, red = drought running now</div>
+    <div class="g8-wrap"><div class="g8">${last8}</div></div>
 
     <div class="m-lbl">[ FULL HISTORY ] &nbsp;&rarr;&nbsp; ${h.gaps.length} completed gaps</div>
     <div class="chart">${bars}</div>
