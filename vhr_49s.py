@@ -175,6 +175,43 @@ def day_is_done(store, day):
     return all(n >= DONE_MIN for n in have.values()), have
 
 
+def _new_browser(p):
+    return p.chromium.launch(channel="chrome", headless=False, args=CHROME_ARGS)
+
+
+def _healthy_page(p, browser, page, say):
+    """A live page, rebuilding whatever has died underneath it.
+
+    A browser that has gone away still hands back a Page from new_page()
+    without complaining - the page is simply closed already - so the browser
+    is asked whether it is still connected rather than being trusted.
+    """
+    try:
+        if browser is not None and browser.is_connected():
+            if page is not None and not page.is_closed():
+                return browser, page
+            return browser, browser.new_page()
+    except Exception:
+        pass
+    if browser is not None:
+        try:
+            browser.close()
+        except Exception:
+            pass
+        say("  restarting the browser")
+    browser = _new_browser(p)
+    return browser, browser.new_page()
+
+
+def _scrape_day(page, day, say):
+    """[(track, record)] for one date across all three tracks."""
+    out = []
+    for code, track in TRACKS.items():
+        for rec in scrape_track_day(page, day, code, log=say):
+            out.append((track, rec))
+    return out
+
+
 def backfill(start, end, dry_run=False, on_progress=None):
     """Walk the date range, merging winners into the store. Resumable."""
     from playwright.sync_api import sync_playwright
@@ -186,8 +223,7 @@ def backfill(start, end, dry_run=False, on_progress=None):
     say(f"backfill {start} -> {end}  ({n_days} days)")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=False, args=CHROME_ARGS)
-        page = browser.new_page()
+        browser, page = None, None
         try:
             day = start
             while day <= end:
@@ -200,30 +236,35 @@ def backfill(start, end, dry_run=False, on_progress=None):
                     day += timedelta(days=1)
                     continue
 
-                # One bad day must not end a 92-day run. Anything that escapes
-                # here - a dead page, a browser that went away, a parse that
-                # threw - is logged and skipped; the day stays unfinished, so a
-                # later run picks it up again.
-                try:
-                    found, records = 0, []
-                    for code, track in TRACKS.items():
-                        for rec in scrape_track_day(page, day, code, log=say):
-                            found += 1
-                            records.append((track, rec))
-                except Exception as e:
-                    say(f"[{idx}/{n_days}] {day}: FAILED {type(e).__name__}: {e}")
+                # scrape_track_day swallows its own page errors and returns
+                # nothing, so an empty day is indistinguishable from a dead
+                # browser - and a dead browser is far the likelier of the two.
+                # Either way the answer is the same: build a fresh browser and
+                # ask once more. Without this, the browser dying on 2026-05-24
+                # burned through the remaining 69 days in four minutes, each
+                # logged as a scraped day with no races in it.
+                records = []
+                for attempt in (1, 2):
+                    browser, page = _healthy_page(p, browser, page, say)
+                    try:
+                        records = _scrape_day(page, day, say)
+                    except Exception as e:
+                        say(f"  {day}: {type(e).__name__}: {e}")
+                        records = []
+                    if records:
+                        break
+                    if attempt == 1:
+                        say(f"  {day}: nothing came back - trying a fresh browser")
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
+                        browser, page = None, None
+
+                if not records:
                     totals["failed_days"] += 1
-                    try:
-                        page.close()
-                    except Exception:
-                        pass
-                    try:
-                        page = browser.new_page()
-                    except Exception:
-                        browser = p.chromium.launch(channel="chrome", headless=False,
-                                                    args=CHROME_ARGS)
-                        page = browser.new_page()
-                        say("  restarted the browser")
+                    say(f"[{idx}/{n_days}] {day}: FAILED - no races. "
+                        f"Left unfinished, so a later run retries it.")
                     day += timedelta(days=1)
                     continue
 
@@ -250,11 +291,15 @@ def backfill(start, end, dry_run=False, on_progress=None):
                 totals["updated"] += u
                 totals["already"] += k
                 totals["days"] += 1
-                say(f"[{idx}/{n_days}] {day}: {found} races  "
+                say(f"[{idx}/{n_days}] {day}: {len(records)} races  "
                     f"+{a} new, +{u} completed, {k} already had")
                 day += timedelta(days=1)
         finally:
-            browser.close()
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
     return totals
 
