@@ -138,11 +138,11 @@ tbody tr.in{opacity:0;transform:translateY(4px);animation:rise 260ms var(--ease-
   margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .g8-wrap{overflow-x:auto}
 .g8{display:grid;gap:1px;background:var(--line);
-  grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+  grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
 .g8 > div{background:var(--panel2);padding:12px 8px;text-align:center;min-width:0}
 .g8 .n{font-family:var(--sans);font-weight:900;font-size:1.9rem;line-height:1;letter-spacing:-.03em}
 .g8 .d{font-size:10px;letter-spacing:.06em;color:var(--dimmer);margin-top:6px}
-.g8 .now{background:var(--red)}
+.g8 .now{background:var(--red);grid-column:1/-1}
 .g8 .now .n,.g8 .now .d{color:#0A0A0A}
 .chart{display:flex;align-items:flex-end;gap:2px;height:110px;border-bottom:1px solid var(--line)}
 .cb{flex:1 1 0;min-width:2px;background:var(--dimmer);transition:background 140ms var(--ease-out)}
@@ -329,7 +329,7 @@ function renderTable(){
 }
 
 /* ---------- modal ---------- */
-const GAP_TAIL=20;   // how many completed gaps the panel lists
+const GAP_TAIL=60;   // how many completed gaps the panel lists (all the payload carries)
 function openModal(odds){
   const t=DATA.tracks[TRACK];
   const row=t.rows.find(r=>r.odds===odds); if(!row) return;
