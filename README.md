@@ -154,6 +154,7 @@ breaks. What it has already changed once:
 | tooltips | harmless | intercept clicks; park the mouse first |
 | attach button | `span[data-icon="clip"]` | `button[aria-label="Attach"]` |
 | sent message | `.message-out` | a `[role="row"]` with a `tail-out` bubble |
+| send button | `aria-label="Send"` | `aria-label="Send 1 selected"`, matched by prefix |
 
 It also throws up a "What's new on WhatsApp Web" modal after an idle spell,
 which sits over the chat list and swallows every click; `_dismiss_dialogs`

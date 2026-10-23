@@ -70,8 +70,11 @@ SEL_ATTACH    = ('footer button[aria-label="Attach"], #main [aria-label="Attach"
                  '#main span[data-icon="plus-rounded"]')
 SEL_CAPTION   = ('div[contenteditable="true"][aria-label*="caption" i], '
                  'div[contenteditable="true"][aria-placeholder*="caption" i]')
-SEL_SEND      = ('[aria-label="Send"], span[data-icon="send"], '
-                 'span[data-icon="wds-ic-send-filled"]')
+# The send control in the attachment preview is labelled for what it is
+# sending - "Send 1 selected" since October 2026 - so match the prefix rather
+# than the whole label, and do not assume it is a <button>.
+SEL_SEND      = ('[aria-label="Send"], [aria-label^="Send "], '
+                 'span[data-icon="send"], span[data-icon="wds-ic-send-filled"]')
 SEL_PENDING   = '#main span[data-icon="msg-time"]'
 
 # WhatsApp Web greets a long-idle session with a "What's new" modal, which sits
