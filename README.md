@@ -94,6 +94,19 @@ and tying the send to `is_full` alone meant it was never sent at all. So the
 send also fires when the card has been **unchanged for three cycles** and holds
 at least `SENDABLE_MIN` races on each of the three tracks.
 
+### One sender at a time
+
+Chrome will not share a profile directory, so a send takes
+`whatsapp_profile.lock` first. Without it, running `SEND TO WHATSAPP.bat`
+while the service was mid-send threw `TargetClosedError` **and** overwrote the
+record of the send that had just succeeded, which would have put a second copy
+in front of the contact on the next cycle. The lock covers the browser session
+and `whatsapp_sent.json` together.
+
+The service also starts at logon, so the first send after a cold boot can run
+before the network is up - a 60-second page load that would have worked a
+minute later. The load is retried with a widening wait.
+
 ### Deleting it again afterwards
 
 `delete_for_me` removes the sent file from this account's copy of the chat:

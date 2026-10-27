@@ -47,7 +47,7 @@ WA_LOCK     = PROFILE_DIR + ".lock"
 
 
 @contextmanager
-def session_lock(timeout=600):
+def session_lock(timeout=600, stale_after=900):
     """Only one process may drive the WhatsApp profile at a time.
 
     Chrome will not share a profile directory. Running `--send` by hand while
@@ -56,8 +56,10 @@ def session_lock(timeout=600):
     second time on the next cycle. Taking the lock is also what keeps two
     writers off whatsapp_sent.json.
 
-    A send takes a couple of minutes, so the timeout is generous; a lock older
-    than that belongs to a process that died and is taken over.
+    `timeout` is how long to wait for the holder; `stale_after` is how old a
+    lock has to be before its holder is presumed dead and it is taken over.
+    They must be separate: with one number, waiting for the lock and declaring
+    it abandoned happen at the same moment, and the waiter simply walks in.
     """
     start = time.time()
     held = False
@@ -68,7 +70,7 @@ def session_lock(timeout=600):
             break
         except FileExistsError:
             age = time.time() - os.path.getmtime(WA_LOCK) if os.path.exists(WA_LOCK) else 0
-            if age > timeout:
+            if age > stale_after:
                 try:
                     os.remove(WA_LOCK)
                 except OSError:
