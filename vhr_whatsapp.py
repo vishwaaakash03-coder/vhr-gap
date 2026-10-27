@@ -27,6 +27,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 
 import vhr_core as core
@@ -42,6 +43,48 @@ PROFILE_DIR = os.path.join(core.BASE_DIR, "whatsapp_profile")
 SENT_PATH   = os.path.join(core.BASE_DIR, "data", "whatsapp_sent.json")
 LOG_PATH    = os.path.join(core.BASE_DIR, "vhr.log")
 WA_URL      = "https://web.whatsapp.com/"
+WA_LOCK     = PROFILE_DIR + ".lock"
+
+
+@contextmanager
+def session_lock(timeout=600):
+    """Only one process may drive the WhatsApp profile at a time.
+
+    Chrome will not share a profile directory. Running `--send` by hand while
+    the service was mid-send cost 2026-10-27 a TargetClosedError and left the
+    day recorded as unsent, which would have sent the sheet to the contact a
+    second time on the next cycle. Taking the lock is also what keeps two
+    writers off whatsapp_sent.json.
+
+    A send takes a couple of minutes, so the timeout is generous; a lock older
+    than that belongs to a process that died and is taken over.
+    """
+    start = time.time()
+    held = False
+    while True:
+        try:
+            os.close(os.open(WA_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            held = True
+            break
+        except FileExistsError:
+            age = time.time() - os.path.getmtime(WA_LOCK) if os.path.exists(WA_LOCK) else 0
+            if age > timeout:
+                try:
+                    os.remove(WA_LOCK)
+                except OSError:
+                    pass
+                continue
+            if time.time() - start > timeout:
+                raise RuntimeError("another WhatsApp send is already running")
+            time.sleep(1.0)
+    try:
+        yield
+    finally:
+        if held:
+            try:
+                os.remove(WA_LOCK)
+            except OSError:
+                pass
 
 OFFSCREEN_ARGS = [
     "--window-position=-32000,-32000",
@@ -137,13 +180,36 @@ class NotLoggedIn(Exception):
     pass
 
 
-def _open(p, visible=False):
+def _open(p, visible=False, tries=3, log=log):
+    """The WhatsApp tab, retrying the load while the machine comes up.
+
+    The service starts at logon, so the first send of the day can run seconds
+    after a cold boot, with the network not up yet: 2026-10-27 failed on a
+    60-second goto that would have worked a minute later. Each retry waits
+    longer, which costs nothing on a machine that has been running.
+    """
     ctx = p.chromium.launch_persistent_context(
         PROFILE_DIR, channel="chrome", headless=False, no_viewport=True,
         args=VISIBLE_ARGS if visible else OFFSCREEN_ARGS)
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
-    page.goto(WA_URL, wait_until="domcontentloaded", timeout=60000)
-    return ctx, page
+    last = None
+    for attempt in range(1, tries + 1):
+        try:
+            page.goto(WA_URL, wait_until="domcontentloaded", timeout=60000)
+            return ctx, page
+        except Exception as e:
+            last = e
+            if attempt == tries:
+                break
+            wait = 15 * attempt
+            log(f"WhatsApp did not load ({type(e).__name__}); "
+                f"retrying in {wait}s ({attempt}/{tries - 1})")
+            page.wait_for_timeout(wait * 1000)
+    try:
+        ctx.close()
+    except Exception:
+        pass
+    raise last
 
 
 def _wait_logged_in(page, timeout_s):
@@ -384,7 +450,7 @@ def send_file(path, caption="", contact=CONTACT, visible=False, log=log):
 
     basename = os.path.basename(path)
     deleted = False
-    with sync_playwright() as p:
+    with session_lock(), sync_playwright() as p:
         ctx, page = _open(p, visible=visible)
         try:
             if not _wait_logged_in(page, timeout_s=25):
